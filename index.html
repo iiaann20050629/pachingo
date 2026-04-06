@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Pacheco Neo V6.2 - 退款保護版</title>
+    <title>Pacheco Neo V6.2 - 手機自動適配版</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
     <style>
         /* [核心防護] 徹底禁用系統選單與長按 */
@@ -25,12 +25,14 @@
             display: flex;
             justify-content: center;
             align-items: center;
+            width: 100vw;
+            height: 100vh;
         }
 
         #game-container {
             position: relative;
-            width: 100vw;
-            height: 100vh;
+            width: 100%;
+            height: 100%;
             display: flex;
             justify-content: center;
             align-items: center;
@@ -38,11 +40,11 @@
 
         #ui-header {
             position: absolute;
-            top: 5vh;
+            top: 20px;
             width: 100%;
             display: flex;
             justify-content: center;
-            gap: 15px;
+            gap: 10px;
             z-index: 100;
             pointer-events: none;
         }
@@ -50,37 +52,49 @@
         .panel {
             background: rgba(255,255,255,0.05);
             backdrop-filter: blur(10px);
-            padding: 10px 20px;
+            padding: 8px 15px;
             border-radius: 12px;
             border: 1px solid rgba(0,242,255,0.3);
             text-align: center;
+            min-width: 80px;
         }
 
-        .stat-val { font-size: 1.5rem; font-weight: bold; color: #f1c40f; }
+        .stat-val { font-size: 1.2rem; font-weight: bold; color: #f1c40f; }
 
+        /* [修正] 手機端自動定位佈局 */
         #left-box-wrapper {
             position: absolute;
-            left: calc(50% - 250px);
-            top: 60%;
+            left: 10px;
+            bottom: 20px;
             z-index: 100;
+            transform: scale(0.9);
+            transform-origin: left bottom;
         }
 
         #right-controls-wrapper {
             position: absolute;
-            right: calc(50% - 280px);
-            top: 60%;
+            right: 10px;
+            bottom: 20px;
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 8px;
             z-index: 100;
             background: rgba(0,0,0,0.7);
-            padding: 15px;
+            padding: 12px;
             border-radius: 20px;
             border: 1px solid #333;
+            transform: scale(0.9);
+            transform-origin: right bottom;
+        }
+
+        /* 針對較大螢幕調整 UI 位置 */
+        @media (min-width: 600px) {
+            #left-box-wrapper { left: calc(50% - 250px); top: 60%; bottom: auto; transform: scale(1); }
+            #right-controls-wrapper { right: calc(50% - 280px); top: 60%; bottom: auto; transform: scale(1); }
         }
 
         input {
-            width: 60px;
+            width: 50px;
             background: #111;
             color: #00f2ff;
             border: 1px solid #00f2ff;
@@ -91,7 +105,7 @@
         }
 
         button {
-            padding: 12px 20px;
+            padding: 12px 18px;
             background: linear-gradient(135deg, #00d2ff, #0072ff);
             border: none;
             color: #fff;
@@ -108,11 +122,12 @@
             top: 35%;
             width: 100%;
             text-align: center;
-            font-size: 4rem;
+            font-size: 3rem;
             font-weight: 900;
             pointer-events: none;
             opacity: 0;
             z-index: 200;
+            text-shadow: 0 0 20px rgba(255,255,255,0.5);
         }
     </style>
 </head>
@@ -120,7 +135,7 @@
 
 <div id="game-container">
     <div id="ui-header">
-        <div class="panel">💎 持有彈珠量 <div id="balance-text" class="stat-val">10</div></div>
+        <div class="panel">💎 彈珠 <div id="balance-text" class="stat-val">10</div></div>
         <div class="panel">模式 <div id="mode-text" style="color:#00f2ff; font-weight:bold;">READY</div></div>
     </div>
 
@@ -143,6 +158,7 @@ const { Engine, Render, Runner, Bodies, Composite, Events, Body, Vector } = Matt
 const engine = Engine.create();
 const world = engine.world;
 
+// [修正] 自動偵測視窗大小
 const canvasWidth = window.innerWidth;
 const canvasHeight = window.innerHeight;
 
@@ -155,41 +171,42 @@ const render = Render.create({
 // --- 參數設定 ---
 let balance = 10;
 let isPlaying = false; 
-const slotCount = 16;
+const slotCount = 12; // 調整槽位數量以適配手機寬度
 let boxBalls = [];
 
 const marginY = canvasHeight * 0.1;
-const boardHeight = canvasHeight * 0.8;
+const boardHeight = canvasHeight * 0.75;
 const boardTop = marginY;
 const boardBottom = canvasHeight - marginY;
 const boardCenterX = canvasWidth / 2;
-const boardWidth = 320;
+
+// [修正] 根據手機寬度自動縮放盤面寬度 (最大不超過 360)
+const boardWidth = Math.min(canvasWidth * 0.85, 360);
 
 // --- 物理建構 ---
 const wallStyle = { fillStyle: 'rgba(255,255,255,0.05)' };
 const leftWall = Bodies.rectangle(boardCenterX - boardWidth/2, canvasHeight/2, 10, boardHeight, { isStatic: true, render: wallStyle });
 const rightWall = Bodies.rectangle(boardCenterX + boardWidth/2, canvasHeight/2, 10, boardHeight, { isStatic: true, render: wallStyle });
 
-const boxX = boardCenterX - boardWidth/2 - 130;
-const boxY = boardBottom - 250;
+// [修正] 收集盒位置隨螢幕調整
+const boxX = (canvasWidth < 600) ? 30 : boardCenterX - boardWidth/2 - 130;
+const boxY = boardBottom - 180;
 const boxWalls = [
-    Bodies.rectangle(boxX, boxY + 110, 8, 250, { isStatic: true, render: { fillStyle: '#222' } }),
-    Bodies.rectangle(boxX + 130, boxY + 110, 8, 250, { isStatic: true, render: { fillStyle: '#222' } }),
-    Bodies.rectangle(boxX + 65, boxY + 235, 138, 8, { isStatic: true, render: { fillStyle: '#222' } })
+    Bodies.rectangle(boxX + 65, boxY + 110, 8, 150, { isStatic: true, render: { fillStyle: '#222' } }),
+    Bodies.rectangle(boxX + 165, boxY + 110, 8, 150, { isStatic: true, render: { fillStyle: '#222' } }),
+    Bodies.rectangle(boxX + 115, boxY + 185, 108, 8, { isStatic: true, render: { fillStyle: '#222' } })
 ];
 
 const pegs = [];
-const rows = 12;
-const spacingY = (boardHeight - 200) / (rows - 1);
+const rows = 10;
+const spacingY = (boardHeight - 150) / (rows - 1);
 for (let r = 0; r < rows; r++) {
     const isEven = r % 2 === 0;
-    const cols = isEven ? 8 : 7;
-    const stepX = boardWidth / 8;
+    const cols = isEven ? 7 : 6;
+    const stepX = boardWidth / 7;
     const xStart = boardCenterX - boardWidth/2 + (isEven ? stepX/2 : stepX);
     for (let c = 0; c < cols; c++) {
-        const jitterX = (Math.random() - 0.5) * 5; 
-        const jitterY = (Math.random() - 0.5) * 3;
-        pegs.push(Bodies.circle(xStart + c * stepX + jitterX, boardTop + 100 + r * spacingY + jitterY, 4.5, {
+        pegs.push(Bodies.circle(xStart + c * stepX, boardTop + 80 + r * spacingY, 4, {
             isStatic: true, restitution: 1.1, render: { fillStyle: '#444' }
         }));
     }
@@ -198,7 +215,7 @@ for (let r = 0; r < rows; r++) {
 const bins = [];
 const binWidth = boardWidth / slotCount;
 for (let i = 0; i < slotCount; i++) {
-    bins.push(Bodies.rectangle(boardCenterX - boardWidth/2 + i*binWidth + binWidth/2, boardBottom - 25, binWidth-2, 50, {
+    bins.push(Bodies.rectangle(boardCenterX - boardWidth/2 + i*binWidth + binWidth/2, boardBottom - 20, binWidth-2, 40, {
         isStatic: true, label: `bin_${i}`, render: { fillStyle: 'rgba(255,255,255,0.05)' }
     }));
 }
@@ -214,10 +231,10 @@ function playSFX(f, d=0.1, v=0.05) {
 }
 
 function syncBox() {
-    const visualNum = Math.min(balance, 100);
+    const visualNum = Math.min(balance, 50);
     while(boxBalls.length > visualNum) { Composite.remove(world, boxBalls.pop()); }
     while(boxBalls.length < visualNum) {
-        const b = Bodies.circle(boxX + 15 + Math.random()*100, boxY + 50, 4, { restitution: 0.5, friction: 0.2, render: { fillStyle: '#f1c40f' }});
+        const b = Bodies.circle(boxX + 80 + Math.random()*60, boxY + 50, 3.5, { restitution: 0.5, friction: 0.2, render: { fillStyle: '#f1c40f' }});
         boxBalls.push(b); Composite.add(world, b);
     }
     document.getElementById('balance-text').innerText = balance;
@@ -234,16 +251,12 @@ function launch() {
     document.getElementById('start-btn').disabled = true;
     syncBox();
 
-    // --- 修正：2倍機率調高 ---
-    const modes = [
-        {m:2,c:4}, {m:2,c:4}, {m:2,c:4}, // 增加 2X 的權重
-        {m:4,c:3}, {m:6,c:2}, {m:8,c:1}
-    ];
+    const modes = [{m:2,c:4}, {m:2,c:4}, {m:4,c:3}, {m:6,c:2}, {m:8,c:1}];
     const mode = modes[Math.floor(Math.random()*modes.length)];
     let activeIndices = [];
     while(activeIndices.length < mode.c) {
         let r = Math.floor(Math.random()*slotCount);
-        if(!activeIndices.includes(r) && !activeIndices.includes(r-1) && !activeIndices.includes(r+1)) activeIndices.push(r);
+        if(!activeIndices.includes(r)) activeIndices.push(r);
     }
 
     document.getElementById('mode-text').innerText = `${mode.m}X MODE`;
@@ -251,44 +264,22 @@ function launch() {
         const active = activeIndices.includes(i);
         b.render.fillStyle = active ? 'rgba(255,255,0,0.5)' : 'rgba(255,255,255,0.05)';
         b.render.strokeStyle = active ? '#ff0' : 'transparent';
-        b.render.lineWidth = active ? 3 : 0;
+        b.render.lineWidth = active ? 2 : 0;
     });
 
-    const ball = Bodies.circle(boardCenterX + (Math.random()*40-20), boardTop + 50, 10, {
-        label: 'playerBall', restitution: 0.9, customData: { bet, mode: mode.m, activeIndices },
-        render: { fillStyle: '#fff', strokeStyle: '#00f2ff', lineWidth: 3 }
+    const ball = Bodies.circle(boardCenterX + (Math.random()*20-10), boardTop + 30, 8, {
+        label: 'playerBall', restitution: 0.8, customData: { bet, mode: mode.m, activeIndices },
+        render: { fillStyle: '#fff', strokeStyle: '#00f2ff', lineWidth: 2 }
     });
     Composite.add(world, ball);
 
-    // 停滯感測邏輯
-    let lastX = ball.position.x;
-    let lastY = ball.position.y;
+    let lastPos = { x: ball.position.x, y: ball.position.y };
     let stayTime = 0;
     const monitor = setInterval(() => {
-        if (!isPlaying || !Composite.allBodies(world).includes(ball)) {
-            clearInterval(monitor);
-            return;
-        }
-        
-        const dx = ball.position.x - lastX;
-        const dy = ball.position.y - lastY;
-        const dist = Math.sqrt(dx*dx + dy*dy);
-        
-        if (dist < 0.5) { 
-            stayTime += 100;
-        } else {
-            stayTime = 0;
-            lastX = ball.position.x;
-            lastY = ball.position.y;
-        }
-
-        if (stayTime >= 3000) { 
-            // --- 修正：卡球退款邏輯 ---
-            balance += ball.customData.bet; 
-            showMsg('卡球退回!', '#00f2ff');
-            endRound(ball);
-            clearInterval(monitor);
-        }
+        if (!isPlaying || !Composite.allBodies(world).includes(ball)) { clearInterval(monitor); return; }
+        const dist = Vector.magnitude(Vector.sub(ball.position, lastPos));
+        if (dist < 0.5) stayTime += 100; else { stayTime = 0; lastPos = { x: ball.position.x, y: ball.position.y }; }
+        if (stayTime >= 3000) { balance += ball.customData.bet; showMsg('卡球退回!', '#00f2ff'); endRound(ball); clearInterval(monitor); }
     }, 100);
 }
 
@@ -297,22 +288,14 @@ Events.on(engine, 'collisionStart', (e) => {
         const { bodyA, bodyB } = p;
         const ball = bodyA.label === 'playerBall' ? bodyA : (bodyB.label === 'playerBall' ? bodyB : null);
         const target = bodyA === ball ? bodyB : bodyA;
-
         if(ball && target.label && target.label.startsWith('bin_')) {
             const idx = parseInt(target.label.split('_')[1]);
             if(ball.customData.activeIndices.includes(idx)) {
                 const win = ball.customData.bet * ball.customData.mode;
-                balance += win;
-                showMsg(`+${win}`, '#f1c40f');
-                playSFX(1000, 0.4, 0.15);
-            } else {
-                showMsg('MISS', '#666');
-                playSFX(200, 0.2, 0.1);
-            }
+                balance += win; showMsg(`+${win}`, '#f1c40f'); playSFX(1000, 0.4, 0.15);
+            } else { showMsg('MISS', '#666'); playSFX(200, 0.2, 0.1); }
             endRound(ball);
-        } else if(ball && target.isStatic) {
-            playSFX(800 + Math.random()*500, 0.05, 0.03);
-        }
+        } else if(ball && target.isStatic) { playSFX(800 + Math.random()*500, 0.05, 0.03); }
     });
 });
 
@@ -321,12 +304,7 @@ function endRound(ball) {
     isPlaying = false; 
     document.getElementById('start-btn').disabled = false;
     syncBox();
-    
-    // 退款後再次檢查持有量，確保不隨意重開
-    if (balance > 0) {
-        document.getElementById('start-btn').style.display = 'block';
-        document.getElementById('reset-btn').style.display = 'none';
-    } else if (balance === 0) {
+    if (balance <= 0) {
         document.getElementById('start-btn').style.display = 'none';
         document.getElementById('reset-btn').style.display = 'block';
     }
