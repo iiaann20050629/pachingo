@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Pacheco Neo V6.2 - 退款保護版</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+    <style>
+        /* [核心防護] 徹底禁用系統選單與長按 */
+        * {
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+            outline: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            margin: 0;
+            background: radial-gradient(circle at center, #0a0a20 0%, #030308 100%);
+            color: #fff;
+            font-family: sans-serif;
+            overflow: hidden;
+            touch-action: none;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #ui-header {
+            position: absolute;
+            top: 5vh;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            z-index: 100;
+            pointer-events: none;
+        }
+
+        .panel {
+            background: rgba(255,255,255,0.05);
+            backdrop-filter: blur(10px);
+            padding: 10px 20px;
+            border-radius: 12px;
+            border: 1px solid rgba(0,242,255,0.3);
+            text-align: center;
+        }
+
+        .stat-val { font-size: 1.5rem; font-weight: bold; color: #f1c40f; }
+
+        #left-box-wrapper {
+            position: absolute;
+            left: calc(50% - 250px);
+            top: 60%;
+            z-index: 100;
+        }
+
+        #right-controls-wrapper {
+            position: absolute;
+            right: calc(50% - 280px);
+            top: 60%;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 100;
+            background: rgba(0,0,0,0.7);
+            padding: 15px;
+            border-radius: 20px;
+            border: 1px solid #333;
+        }
+
+        input {
+            width: 60px;
+            background: #111;
+            color: #00f2ff;
+            border: 1px solid #00f2ff;
+            padding: 8px;
+            text-align: center;
+            font-size: 1.2rem;
+            border-radius: 5px;
+        }
+
+        button {
+            padding: 12px 20px;
+            background: linear-gradient(135deg, #00d2ff, #0072ff);
+            border: none;
+            color: #fff;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        button:active { transform: scale(0.9); }
+        #reset-btn { background: #ff4757; display: none; }
+
+        #msg {
+            position: absolute;
+            top: 35%;
+            width: 100%;
+            text-align: center;
+            font-size: 4rem;
+            font-weight: 900;
+            pointer-events: none;
+            opacity: 0;
+            z-index: 200;
+        }
+    </style>
+</head>
+<body oncontextmenu="return false;">
+
+<div id="game-container">
+    <div id="ui-header">
+        <div class="panel">💎 持有彈珠量 <div id="balance-text" class="stat-val">10</div></div>
+        <div class="panel">模式 <div id="mode-text" style="color:#00f2ff; font-weight:bold;">READY</div></div>
+    </div>
+
+    <div id="msg">WIN!</div>
+
+    <div id="left-box-wrapper">
+        <div style="font-size: 0.7rem; color: #777; text-align: center; margin-bottom: 5px;">COLLECTION</div>
+    </div>
+
+    <div id="right-controls-wrapper">
+        <div style="font-size: 0.7rem; color: #aaa; text-align: center;">BET</div>
+        <input type="number" id="bet-input" value="1" min="1" max="99">
+        <button id="start-btn" onclick="launch()">發射</button>
+        <button id="reset-btn" onclick="resetGame()">重開</button>
+    </div>
+</div>
+
+<script>
+const { Engine, Render, Runner, Bodies, Composite, Events, Body, Vector } = Matter;
+const engine = Engine.create();
+const world = engine.world;
+
+const canvasWidth = window.innerWidth;
+const canvasHeight = window.innerHeight;
+
+const render = Render.create({
+    element: document.getElementById('game-container'),
+    engine: engine,
+    options: { width: canvasWidth, height: canvasHeight, wireframes: false, background: 'transparent' }
+});
+
+// --- 參數設定 ---
+let balance = 10;
+let isPlaying = false; 
+const slotCount = 16;
+let boxBalls = [];
+
+const marginY = canvasHeight * 0.1;
+const boardHeight = canvasHeight * 0.8;
+const boardTop = marginY;
+const boardBottom = canvasHeight - marginY;
+const boardCenterX = canvasWidth / 2;
+const boardWidth = 320;
+
+// --- 物理建構 ---
+const wallStyle = { fillStyle: 'rgba(255,255,255,0.05)' };
+const leftWall = Bodies.rectangle(boardCenterX - boardWidth/2, canvasHeight/2, 10, boardHeight, { isStatic: true, render: wallStyle });
+const rightWall = Bodies.rectangle(boardCenterX + boardWidth/2, canvasHeight/2, 10, boardHeight, { isStatic: true, render: wallStyle });
+
+const boxX = boardCenterX - boardWidth/2 - 130;
+const boxY = boardBottom - 250;
+const boxWalls = [
+    Bodies.rectangle(boxX, boxY + 110, 8, 250, { isStatic: true, render: { fillStyle: '#222' } }),
+    Bodies.rectangle(boxX + 130, boxY + 110, 8, 250, { isStatic: true, render: { fillStyle: '#222' } }),
+    Bodies.rectangle(boxX + 65, boxY + 235, 138, 8, { isStatic: true, render: { fillStyle: '#222' } })
+];
+
+const pegs = [];
+const rows = 12;
+const spacingY = (boardHeight - 200) / (rows - 1);
+for (let r = 0; r < rows; r++) {
+    const isEven = r % 2 === 0;
+    const cols = isEven ? 8 : 7;
+    const stepX = boardWidth / 8;
+    const xStart = boardCenterX - boardWidth/2 + (isEven ? stepX/2 : stepX);
+    for (let c = 0; c < cols; c++) {
+        const jitterX = (Math.random() - 0.5) * 5; 
+        const jitterY = (Math.random() - 0.5) * 3;
+        pegs.push(Bodies.circle(xStart + c * stepX + jitterX, boardTop + 100 + r * spacingY + jitterY, 4.5, {
+            isStatic: true, restitution: 1.1, render: { fillStyle: '#444' }
+        }));
+    }
+}
+
+const bins = [];
+const binWidth = boardWidth / slotCount;
+for (let i = 0; i < slotCount; i++) {
+    bins.push(Bodies.rectangle(boardCenterX - boardWidth/2 + i*binWidth + binWidth/2, boardBottom - 25, binWidth-2, 50, {
+        isStatic: true, label: `bin_${i}`, render: { fillStyle: 'rgba(255,255,255,0.05)' }
+    }));
+}
+
+Composite.add(world, [leftWall, rightWall, ...boxWalls, ...pegs, ...bins]);
+
+// --- 邏輯功能 ---
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+function playSFX(f, d=0.1, v=0.05) {
+    const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
+    o.frequency.value = f; g.gain.value = v; g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + d);
+    o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime + d);
+}
+
+function syncBox() {
+    const visualNum = Math.min(balance, 100);
+    while(boxBalls.length > visualNum) { Composite.remove(world, boxBalls.pop()); }
+    while(boxBalls.length < visualNum) {
+        const b = Bodies.circle(boxX + 15 + Math.random()*100, boxY + 50, 4, { restitution: 0.5, friction: 0.2, render: { fillStyle: '#f1c40f' }});
+        boxBalls.push(b); Composite.add(world, b);
+    }
+    document.getElementById('balance-text').innerText = balance;
+}
+
+function launch() {
+    if(isPlaying) return; 
+    const bet = parseInt(document.getElementById('bet-input').value);
+    if(bet < 1 || bet > 99) return alert("單次投入上限為 99 顆");
+    if(balance < bet) return alert("彈珠不足");
+
+    balance -= bet;
+    isPlaying = true; 
+    document.getElementById('start-btn').disabled = true;
+    syncBox();
+
+    // --- 修正：2倍機率調高 ---
+    const modes = [
+        {m:2,c:4}, {m:2,c:4}, {m:2,c:4}, // 增加 2X 的權重
+        {m:4,c:3}, {m:6,c:2}, {m:8,c:1}
+    ];
+    const mode = modes[Math.floor(Math.random()*modes.length)];
+    let activeIndices = [];
+    while(activeIndices.length < mode.c) {
+        let r = Math.floor(Math.random()*slotCount);
+        if(!activeIndices.includes(r) && !activeIndices.includes(r-1) && !activeIndices.includes(r+1)) activeIndices.push(r);
+    }
+
+    document.getElementById('mode-text').innerText = `${mode.m}X MODE`;
+    bins.forEach((b, i) => {
+        const active = activeIndices.includes(i);
+        b.render.fillStyle = active ? 'rgba(255,255,0,0.5)' : 'rgba(255,255,255,0.05)';
+        b.render.strokeStyle = active ? '#ff0' : 'transparent';
+        b.render.lineWidth = active ? 3 : 0;
+    });
+
+    const ball = Bodies.circle(boardCenterX + (Math.random()*40-20), boardTop + 50, 10, {
+        label: 'playerBall', restitution: 0.9, customData: { bet, mode: mode.m, activeIndices },
+        render: { fillStyle: '#fff', strokeStyle: '#00f2ff', lineWidth: 3 }
+    });
+    Composite.add(world, ball);
+
+    // 停滯感測邏輯
+    let lastX = ball.position.x;
+    let lastY = ball.position.y;
+    let stayTime = 0;
+    const monitor = setInterval(() => {
+        if (!isPlaying || !Composite.allBodies(world).includes(ball)) {
+            clearInterval(monitor);
+            return;
+        }
+        
+        const dx = ball.position.x - lastX;
+        const dy = ball.position.y - lastY;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        
+        if (dist < 0.5) { 
+            stayTime += 100;
+        } else {
+            stayTime = 0;
+            lastX = ball.position.x;
+            lastY = ball.position.y;
+        }
+
+        if (stayTime >= 3000) { 
+            // --- 修正：卡球退款邏輯 ---
+            balance += ball.customData.bet; 
+            showMsg('卡球退回!', '#00f2ff');
+            endRound(ball);
+            clearInterval(monitor);
+        }
+    }, 100);
+}
+
+Events.on(engine, 'collisionStart', (e) => {
+    e.pairs.forEach(p => {
+        const { bodyA, bodyB } = p;
+        const ball = bodyA.label === 'playerBall' ? bodyA : (bodyB.label === 'playerBall' ? bodyB : null);
+        const target = bodyA === ball ? bodyB : bodyA;
+
+        if(ball && target.label && target.label.startsWith('bin_')) {
+            const idx = parseInt(target.label.split('_')[1]);
+            if(ball.customData.activeIndices.includes(idx)) {
+                const win = ball.customData.bet * ball.customData.mode;
+                balance += win;
+                showMsg(`+${win}`, '#f1c40f');
+                playSFX(1000, 0.4, 0.15);
+            } else {
+                showMsg('MISS', '#666');
+                playSFX(200, 0.2, 0.1);
+            }
+            endRound(ball);
+        } else if(ball && target.isStatic) {
+            playSFX(800 + Math.random()*500, 0.05, 0.03);
+        }
+    });
+});
+
+function endRound(ball) {
+    if(ball) Composite.remove(world, ball);
+    isPlaying = false; 
+    document.getElementById('start-btn').disabled = false;
+    syncBox();
+    
+    // 退款後再次檢查持有量，確保不隨意重開
+    if (balance > 0) {
+        document.getElementById('start-btn').style.display = 'block';
+        document.getElementById('reset-btn').style.display = 'none';
+    } else if (balance === 0) {
+        document.getElementById('start-btn').style.display = 'none';
+        document.getElementById('reset-btn').style.display = 'block';
+    }
+}
+
+function showMsg(t, c) {
+    const el = document.getElementById('msg');
+    el.innerText = t; el.style.color = c; el.style.opacity = 1;
+    setTimeout(() => el.style.opacity = 0, 1000);
+}
+
+function resetGame() {
+    balance = 10;
+    document.getElementById('start-btn').style.display = 'block';
+    document.getElementById('reset-btn').style.display = 'none';
+    syncBox();
+}
+
+Render.run(render);
+Runner.run(Runner.create(), engine);
+syncBox();
+</script>
+</body>
+</html>
